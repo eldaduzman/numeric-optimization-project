@@ -61,10 +61,12 @@ def log_returns(prices: pd.DataFrame) -> pd.DataFrame:
     """1-period log-returns, dropping rows with *any* NaNs."""
     return np.log(prices / prices.shift(1)).dropna(how="any")
 
-def solve_cvxpy(objective, constraints, solver=None):   
+
+def solve_cvxpy(objective, constraints, solver=None):
     prob = cp.Problem(cp.Minimize(objective), constraints)
     prob.solve(solver=solver)
     return prob.status, prob.value, prob.variables()
+
 
 def optimise_cvar(
     R: pd.DataFrame,
@@ -111,6 +113,7 @@ def optimise_cvar(
         "status": prob[0],
     }
 
+
 def optimize_mean_variance(
     R: pd.DataFrame,
     target_return: float | None = None,
@@ -119,9 +122,9 @@ def optimize_mean_variance(
 ) -> dict:
     """Mean-variance optimisation."""
     mu = R.mean().values
-    Sigma = np.cov(R.values, rowvar=False) 
+    Sigma = np.cov(R.values, rowvar=False)
     n = len(mu)
-    
+
     w = cp.Variable(n)
     objective = cp.quad_form(w, Sigma)
     constraints = [cp.sum(w) == 1]
@@ -130,7 +133,7 @@ def optimize_mean_variance(
         constraints.append(w >= short_cap)
 
     if target_return is not None:
-        target_constr = (mu @ w >= target_return)
+        target_constr = mu @ w >= target_return
         constraints.append(target_constr)
 
     try:
@@ -148,7 +151,9 @@ def optimize_mean_variance(
                     constraints.append(mu @ w >= target_return)
                 status, _, _ = solve_cvxpy(objective, constraints)
         if w.value is None:
-            raise Exception("Optimization failed: Problem infeasible even after relaxing constraints.")
+            raise Exception(
+                "Optimization failed: Problem infeasible even after relaxing constraints."
+            )
     except Exception as e:
         raise RuntimeError(f"Optimization failed: {e}")
 
@@ -160,11 +165,12 @@ def optimize_mean_variance(
     weights_series = pd.Series(weights, index=R.columns, name="weight")
 
     return {
-        'weights': weights_series,
-        'expected_return': float(exp_return),
-        'variance': float(var),
-        'status': status
+        "weights": weights_series,
+        "expected_return": float(exp_return),
+        "variance": float(var),
+        "status": status,
     }
+
 
 def main() -> None:
     prices = load_prices(DATA_PATH)
@@ -181,7 +187,11 @@ def main() -> None:
     print("CVaR Optimization Results:")
     print("--------------------------")
     print("\nOptimal weights (|w| ≥ {:.5f}):".format(SHOW_ABS_GT))
-    print(res_cvar["weights"][res_cvar["weights"].abs() >= SHOW_ABS_GT].round(6).to_string())
+    print(
+        res_cvar["weights"][res_cvar["weights"].abs() >= SHOW_ABS_GT]
+        .round(6)
+        .to_string()
+    )
     print("\nSummary:")
     print(f"  expected return : {res_cvar['expected_return']:.6%} per period")
     print(f"  VaR @ {BETA:.0%}        : {res_cvar['VaR']:.6f}")
@@ -191,11 +201,16 @@ def main() -> None:
     print("\nMean-Variance Optimization Results:")
     print("-------------------------------------")
     print("\nOptimal weights (|w| ≥ {:.5f}):".format(SHOW_ABS_GT))
-    print(res_mean_variance["weights"][res_mean_variance["weights"].abs() >= SHOW_ABS_GT].round(6).to_string())
+    print(
+        res_mean_variance["weights"][res_mean_variance["weights"].abs() >= SHOW_ABS_GT]
+        .round(6)
+        .to_string()
+    )
     print("\nSummary:")
     print(f"  expected return : {res_mean_variance['expected_return']:.6%} per period")
     print(f"  variance        : {res_mean_variance['variance']:.6f}")
     print("  solver status   :", res_mean_variance["status"])
+
 
 if __name__ == "__main__":
     main()
