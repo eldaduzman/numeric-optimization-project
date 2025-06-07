@@ -6,9 +6,9 @@ import cvxpy as cp
 
 # ───── CONFIG ────────────────────────────────────────────────────────────── #
 DATA_PATH = Path("stocks_clean_aligned_v2.csv")  # the file you just uploaded
-START, END = "2015-02-01", "2015-02-10"
+START, END = "2015-02-01", "2019-12-31"
 BETA = 0.95  # confidence level for CVaR
-TARGET_RETURN = None  # e.g. 0.0001 (=0.01 % per period) or None
+TARGET_RETURN = 0.0001  # e.g. 0.0001 (=0.01 % per period) or None
 SHORT_CAP = 0.2  # e.g. 0.2 caps any single short at −20 %
 SHOW_ABS_GT = 1e-4  # print weights with |w| ≥ 0.0001 (0.01 %)
 # ─────────────────────────────────────────────────────────────────────────── #
