@@ -1,16 +1,4 @@
 #!/usr/bin/env python3
-"""
-CVaR portfolio optimiser
-========================
-• Loads *long-format* CSV (columns: date, price, company, …)
-• Pivots to a prices matrix  (dates × tickers)
-• Turns prices → log-returns
-• Minimises  CVaR_β of portfolio loss (Rockafellar & Uryasev formulation)
-• Prints the weights, expected return, VaR and CVaR
-
-Adjust the CONFIG section to suit your slice, confidence level, constraints, …
------------------------------------------------------------------------------
-"""
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -73,6 +61,10 @@ def log_returns(prices: pd.DataFrame) -> pd.DataFrame:
     """1-period log-returns, dropping rows with *any* NaNs."""
     return np.log(prices / prices.shift(1)).dropna(how="any")
 
+def solve_cvxpy(objective, constraints, solver=None):   
+    prob = cp.Problem(cp.Minimize(objective), constraints)
+    prob.solve(solver=solver)
+    return prob.status, prob.value, prob.variables()
 
 def optimise_cvar(
     R: pd.DataFrame,
@@ -98,18 +90,17 @@ def optimise_cvar(
     if target_return is not None:
         cons.append(mu @ w >= target_return)
 
-    prob = cp.Problem(cp.Minimize(CVaR), cons)
-    prob.solve(solver=cp.ECOS)
+    prob = solve_cvxpy(CVaR, cons, cp.ECOS)
 
     # retry without unreachable target_return
-    if prob.status == "infeasible" and target_return and relax_if_needed:
+    if prob[0] == "infeasible" and target_return and relax_if_needed:
         print(
             f"⚠️  Target return {target_return:.6%} infeasible ⇒ retrying unconstrained."
         )
         return optimise_cvar(R, beta, None, short_cap, False)
 
-    if prob.status not in ("optimal", "optimal_inaccurate"):
-        raise RuntimeError(f"Solver failed: {prob.status}")
+    if prob[0] not in ("optimal", "optimal_inaccurate"):
+        raise RuntimeError(f"Solver failed: {prob[0]}")
 
     w_series = pd.Series(w.value, index=R.columns, name="weight")
     return {
@@ -117,9 +108,63 @@ def optimise_cvar(
         "expected_return": float(mu @ w.value),
         "VaR": alpha.value,
         "CVaR": CVaR.value,
-        "status": prob.status,
+        "status": prob[0],
     }
 
+def optimize_mean_variance(
+    R: pd.DataFrame,
+    target_return: float | None = None,
+    short_cap: float | None = None,
+    relax_if_needed: bool = True,
+) -> dict:
+    """Mean-variance optimisation."""
+    mu = R.mean().values
+    Sigma = np.cov(R.values, rowvar=False) 
+    n = len(mu)
+    
+    w = cp.Variable(n)
+    objective = cp.quad_form(w, Sigma)
+    constraints = [cp.sum(w) == 1]
+
+    if short_cap is not None:
+        constraints.append(w >= short_cap)
+
+    if target_return is not None:
+        target_constr = (mu @ w >= target_return)
+        constraints.append(target_constr)
+
+    try:
+        status, _, _ = solve_cvxpy(objective, constraints)
+        if w.value is None and relax_if_needed:
+            # Relax target_return constraint if infeasible
+            if target_return is not None:
+                constraints = [c for c in constraints if c is not target_constr]
+                status, _, _ = solve_cvxpy(objective, constraints)
+        if w.value is None and relax_if_needed:
+            # Relax short_cap constraint
+            if short_cap is not None:
+                constraints = [cp.sum(w) == 1]
+                if target_return is not None:
+                    constraints.append(mu @ w >= target_return)
+                status, _, _ = solve_cvxpy(objective, constraints)
+        if w.value is None:
+            raise Exception("Optimization failed: Problem infeasible even after relaxing constraints.")
+    except Exception as e:
+        raise RuntimeError(f"Optimization failed: {e}")
+
+    weights = np.array(w.value).flatten()
+    exp_return = mu @ weights
+    var = weights.T @ Sigma @ weights
+
+    # Convert weights to pandas Series with the same index as input returns
+    weights_series = pd.Series(weights, index=R.columns, name="weight")
+
+    return {
+        'weights': weights_series,
+        'expected_return': float(exp_return),
+        'variance': float(var),
+        'status': status
+    }
 
 def main() -> None:
     prices = load_prices(DATA_PATH)
@@ -129,17 +174,28 @@ def main() -> None:
     if returns.empty:
         raise ValueError("No return rows after slicing - check dates.")
 
-    res = optimise_cvar(returns, BETA, TARGET_RETURN, SHORT_CAP)
+    res_cvar = optimise_cvar(returns, BETA, TARGET_RETURN, SHORT_CAP)
+    res_mean_variance = optimize_mean_variance(returns, TARGET_RETURN, SHORT_CAP)
 
     # — results —
+    print("CVaR Optimization Results:")
+    print("--------------------------")
     print("\nOptimal weights (|w| ≥ {:.5f}):".format(SHOW_ABS_GT))
-    print(res["weights"][res["weights"].abs() >= SHOW_ABS_GT].round(6).to_string())
+    print(res_cvar["weights"][res_cvar["weights"].abs() >= SHOW_ABS_GT].round(6).to_string())
     print("\nSummary:")
-    print(f"  expected return : {res['expected_return']:.6%} per period")
-    print(f"  VaR @ {BETA:.0%}        : {res['VaR']:.6f}")
-    print(f"  CVaR @ {BETA:.0%}       : {res['CVaR']:.6f}")
-    print("  solver status   :", res["status"])
+    print(f"  expected return : {res_cvar['expected_return']:.6%} per period")
+    print(f"  VaR @ {BETA:.0%}        : {res_cvar['VaR']:.6f}")
+    print(f"  CVaR @ {BETA:.0%}       : {res_cvar['CVaR']:.6f}")
+    print("  solver status   :", res_cvar["status"])
 
+    print("\nMean-Variance Optimization Results:")
+    print("-------------------------------------")
+    print("\nOptimal weights (|w| ≥ {:.5f}):".format(SHOW_ABS_GT))
+    print(res_mean_variance["weights"][res_mean_variance["weights"].abs() >= SHOW_ABS_GT].round(6).to_string())
+    print("\nSummary:")
+    print(f"  expected return : {res_mean_variance['expected_return']:.6%} per period")
+    print(f"  variance        : {res_mean_variance['variance']:.6f}")
+    print("  solver status   :", res_mean_variance["status"])
 
 if __name__ == "__main__":
     main()
