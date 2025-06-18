@@ -48,6 +48,53 @@ def load_prices(
     return wide
 
 
+def simulate_top_n(
+    prices: pd.DataFrame,
+    n: int = 3,
+    initial_cash: float = 1_000.0,
+) -> pd.Series:
+    """
+    Run the Top-N momentum back-test and return a Series of portfolio values
+    at each month-end tick (index = prices.index).
+    """
+    cash = initial_cash
+    holdings: dict[str, float] = {}
+    prev_px = prices.iloc[0]
+
+    # create a Series to collect valuations
+    vals = pd.Series(index=prices.index, dtype=float)
+    vals.iloc[0] = initial_cash  # starting value at t0
+
+    for idx in range(1, len(prices)):
+        cur_px = prices.iloc[idx]
+
+        # 1) Monthly returns
+        monthly_ret = (cur_px / prev_px) - 1.0
+        monthly_ret = monthly_ret.dropna()
+
+        # 2) Pick Top-N
+        top = monthly_ret.nlargest(n).index
+        if len(top) == 0:
+            vals.iloc[idx] = vals.iloc[idx - 1]  # carry forward
+            prev_px = cur_px
+            continue
+
+        # 3) Liquidate
+        if holdings:
+            cash = sum(cur_px[t] * sh for t, sh in holdings.items())
+
+        # 4) Re-invest equally
+        allocation = cash / len(top)
+        holdings = {t: allocation / cur_px[t] for t in top}
+
+        # 5) Store valuation at this tick
+        vals.iloc[idx] = sum(cur_px[t] * sh for t, sh in holdings.items())
+
+        prev_px = cur_px
+
+    return vals
+
+
 def slice_period(
     prices: pd.DataFrame,
     start: str | None = None,
