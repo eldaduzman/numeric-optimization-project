@@ -14,7 +14,7 @@ This project implements advanced portfolio optimization techniques using numeric
 
 - **CVaR Optimization**: Implements Rockafellar & Uryasev's linear CVaR minimization approach
 - **Mean-Variance Optimization**: Traditional Markowitz portfolio optimization
-- **Risk Attribution**: Shapley-style risk contribution analysis for portfolio components
+- **Risk Attribution**: Sharpe-style risk contribution analysis for portfolio components
 - **Walk-Forward Analysis**: Time-series backtesting with rolling optimization windows
 - **Top-N Momentum Strategy**: Simple momentum-based portfolio strategy for comparison
 - **Interactive Visualizations**: Plotly-based charts for risk attribution and performance analysis
@@ -52,14 +52,14 @@ def optimize_mean_variance(R, target_return=None, short_cap=None):
 
 ### Risk Attribution
 
-Shapley-style risk contribution analysis:
+Sharpe-style risk contribution analysis:
 
 ```python
 def cvar_risk_contributions(R, weights, beta=0.95):
-    """Shapley-equivalent attribution for portfolio CVaR."""
+    """Sharpe-equivalent attribution for portfolio CVaR."""
     
 def variance_risk_contributions(cov, weights):
-    """Shapley (Euler) attribution for portfolio variance."""
+    """Sharpe (Euler) attribution for portfolio variance."""
 ```
 
 ## Data Format
@@ -80,6 +80,6 @@ date,MSFT,GOOGL,AAPL,...
 ## Research Background
 
 This project is based on academic research in portfolio optimization, particularly:
-- Rockafellar & Uryasev (2000): CVaR optimization
+- Rockafellar & Uryasev (1999): CVaR optimization
 - Markowitz (1952): Mean-variance optimization
-- Shapley value theory for risk attribution
+- Sharpe value theory for risk attribution
