@@ -6,3 +6,5 @@ openpyxl==3.1.5
 cvxpy==1.6.5
 ECOS==2.0.14
 matplotlib==3.10.3
+
+snakeviz==2.2.2

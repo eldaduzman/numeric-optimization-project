@@ -143,9 +143,7 @@ def optimise_cvar(
 
     # retry without unreachable target_return
     if prob[0] == "infeasible" and target_return and relax_if_needed:
-        print(
-            f"⚠️  Target return {target_return:.6%} infeasible ⇒ retrying unconstrained."
-        )
+        print(f"Target return {target_return:.6%} infeasible ⇒ retrying unconstrained.")
         return optimise_cvar(R, beta, None, short_cap, False)
 
     if prob[0] not in ("optimal", "optimal_inaccurate"):
